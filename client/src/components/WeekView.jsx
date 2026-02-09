@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { format, startOfWeek, addDays, isSameDay } from 'date-fns'
+import { format, startOfWeek, addDays, isSameDay, addWeeks } from 'date-fns'
 import { getTeamLabel } from '../utils/teams'
 
 const VRET_METRICS = [
@@ -17,9 +17,11 @@ const VRET_METRICS = [
 
 export default function WeekView({ user, washEntries, weeklyActions }) {
   const [isWeekLocked, setIsWeekLocked] = useState(false)
+  const [weekOffset, setWeekOffset] = useState(0) // 0 = current week, -1 = last week, etc.
   
-  const weekStart = startOfWeek(new Date())
+  const weekStart = startOfWeek(addWeeks(new Date(), weekOffset))
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
+  const isCurrentWeek = weekOffset === 0
 
   const teamEntries = washEntries.filter(e => e.team === user.team)
   
@@ -117,19 +119,46 @@ export default function WeekView({ user, washEntries, weeklyActions }) {
 
   return (
     <div className="space-y-6">
-      {/* Week Header with Lock Button */}
+      {/* Week Header with Navigation and Lock Button */}
       <div className="bg-white rounded-lg shadow p-4">
-        <div className="flex justify-between items-center">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-800">
-              Week of {format(weekStart, 'MMMM d, yyyy')} - {getTeamLabel(user.team)}
-            </h2>
-            <p className="text-sm text-gray-600 mt-1">
-              {format(weekStart, 'MMM d')} - {format(addDays(weekStart, 6), 'MMM d, yyyy')}
-            </p>
+        <div className="flex justify-between items-center mb-3">
+          <div className="flex items-center gap-4">
+            <div className="flex gap-2">
+              <button
+                onClick={() => setWeekOffset(weekOffset - 1)}
+                className="px-3 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium"
+                title="Previous Week"
+              >
+                ← Previous
+              </button>
+              <button
+                onClick={() => setWeekOffset(0)}
+                disabled={isCurrentWeek}
+                className={`px-3 py-2 rounded-lg font-medium ${
+                  isCurrentWeek
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                }`}
+                title="Current Week"
+              >
+                Current Week
+              </button>
+              <button
+                onClick={() => setWeekOffset(weekOffset + 1)}
+                disabled={isCurrentWeek}
+                className={`px-3 py-2 rounded-lg font-medium ${
+                  isCurrentWeek
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+                title="Next Week"
+              >
+                Next →
+              </button>
+            </div>
           </div>
           <div className="flex gap-3">
-            {isWeekLocked && (
+            {isWeekLocked && isCurrentWeek && (
               <button
                 onClick={handleUnlockWeek}
                 className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-medium"
@@ -137,20 +166,31 @@ export default function WeekView({ user, washEntries, weeklyActions }) {
                 🔓 Unlock Week
               </button>
             )}
-            <button
-              onClick={handleLockWeek}
-              disabled={isWeekLocked}
-              className={`px-6 py-3 rounded-lg font-medium text-lg ${
-                isWeekLocked 
-                  ? 'bg-gray-400 text-white cursor-not-allowed' 
-                  : 'bg-purple-600 text-white hover:bg-purple-700'
-              }`}
-            >
-              {isWeekLocked ? '🔒 Week Locked' : '🔓 Lock Week & Send Summary'}
-            </button>
+            {isCurrentWeek && (
+              <button
+                onClick={handleLockWeek}
+                disabled={isWeekLocked}
+                className={`px-6 py-3 rounded-lg font-medium text-lg ${
+                  isWeekLocked 
+                    ? 'bg-gray-400 text-white cursor-not-allowed' 
+                    : 'bg-purple-600 text-white hover:bg-purple-700'
+                }`}
+              >
+                {isWeekLocked ? '🔒 Week Locked' : '🔓 Lock Week & Send Summary'}
+              </button>
+            )}
           </div>
         </div>
-        {isWeekLocked && (
+        <div>
+          <h2 className="text-2xl font-bold text-gray-800">
+            Week of {format(weekStart, 'MMMM d, yyyy')} - {getTeamLabel(user.team)}
+            {!isCurrentWeek && <span className="text-lg text-gray-500 ml-2">(Past Week)</span>}
+          </h2>
+          <p className="text-sm text-gray-600 mt-1">
+            {format(weekStart, 'MMM d')} - {format(addDays(weekStart, 6), 'MMM d, yyyy')}
+          </p>
+        </div>
+        {isWeekLocked && isCurrentWeek && (
           <div className="mt-3 p-3 bg-purple-50 border border-purple-200 rounded">
             <p className="text-sm text-purple-800">
               ✓ This week has been locked and the summary was sent to Slack. Click "Unlock Week" to make changes.
