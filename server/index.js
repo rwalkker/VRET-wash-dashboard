@@ -112,109 +112,43 @@ async function sendWeeklySlackNotification(weekData) {
     // Calculate weekly averages for VRET
     const vretAverages = calculateWeeklyAverages(entries, 'vretMetrics');
 
-    // Format daily chart
-    const dailyChart = entries.map(entry => {
-      const date = new Date(entry.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-      return `*${date}*: ${entry.locked ? '✅ Locked' : '⚠️ Not Locked'}`;
-    }).join('\n');
-
-    // Format actions with truncation
-    const actionsText = actions.length > 0 
-      ? actions.slice(0, 10).map(a => {
-          const actionText = truncateText(a.action, 100);
-          return `• *${actionText}* (${a.status}) - Owner: ${a.owner}, Due: ${new Date(a.dueDate).toLocaleDateString()}`;
-        }).join('\n') + (actions.length > 10 ? `\n\n_...and ${actions.length - 10} more action(s)_` : '')
-      : 'No actions for this week';
-
-    // Count WRI incidents and format details
+    // Count WRI incidents
     const totalWRIs = entries.reduce((sum, entry) => sum + (entry.wriIncidents?.length || 0), 0);
-    
-    let wriDetails = '';
-    if (totalWRIs > 0) {
-      wriDetails = `*🚨 Safety*: ${totalWRIs} WRI incident(s) reported this week`;
-      
-      const allIncidents = [];
-      entries.forEach(entry => {
-        if (entry.wriIncidents && entry.wriIncidents.length > 0) {
-          const date = new Date(entry.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-          entry.wriIncidents.forEach(incident => {
-            allIncidents.push({ date, ...incident });
-          });
-        }
-      });
-      
-      if (allIncidents.length > 0) {
-        wriDetails += '\n\n*Incident Details:*';
-        allIncidents.slice(0, 3).forEach((incident, idx) => {
-          wriDetails += `\n\n*${incident.date} - Incident #${idx + 1}*\n${truncateText(incident.summary, 200)}`;
-          if (incident.austinLink) {
-            wriDetails += `\n<${incident.austinLink}|View in Austin>`;
-          }
-        });
-        
-        if (allIncidents.length > 3) {
-          wriDetails += `\n\n_...and ${allIncidents.length - 3} more incident(s). See daily entries for full details._`;
-        }
-      }
-    } else {
-      wriDetails = '*✅ Safety*: No incidents reported this week';
-    }
+    const wriStatus = totalWRIs > 0 ? `🚨 ${totalWRIs} WRI incident(s)` : '✅ No incidents';
+
+    // Count locked days
+    const lockedDays = entries.filter(e => e.locked).length;
+    const dayStatus = `${lockedDays}/${entries.length} days locked`;
+
+    // Top 3 actions
+    const topActions = actions.length > 0 
+      ? actions.slice(0, 3).map(a => `• ${a.action.substring(0, 60)}${a.action.length > 60 ? '...' : ''} (${a.status})`).join('\n')
+      : 'No actions';
 
     const message = {
-      text: `Weekly Summary - Team ${team}`,
+      text: `Team ${team} - Week ${weekStart} to ${weekEnd}`,
       blocks: [
         {
-          type: "header",
+          type: "section",
           text: {
-            type: "plain_text",
-            text: `🔒 Weekly Summary Locked - Team ${team}`,
-            emoji: true
+            type: "mrkdwn",
+            text: `*Team ${team} - Week ${weekStart} to ${weekEnd}*\n${wriStatus} | ${dayStatus} | ${actions.length} action(s)`
           }
         },
         {
           type: "section",
           text: {
             type: "mrkdwn",
-            text: `*Week:* ${weekStart} to ${weekEnd}\n*Locked by:* ${lockedBy}`
+            text: `*VRET Averages*\n${vretAverages}`
           }
         },
-        {
+        ...(actions.length > 0 ? [{
           type: "section",
           text: {
             type: "mrkdwn",
-            text: wriDetails
+            text: `*Top Actions*\n${topActions}${actions.length > 3 ? `\n_+${actions.length - 3} more_` : ''}`
           }
-        },
-        {
-          type: "divider"
-        },
-        {
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text: `*📊 VRET Weekly Averages*\n${vretAverages}`
-          }
-        },
-        {
-          type: "divider"
-        },
-        {
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text: `*📅 Daily Status*\n${dailyChart}`
-          }
-        },
-        {
-          type: "divider"
-        },
-        {
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text: `*📋 Weekly Actions*\n${actionsText}`
-          }
-        }
+        }] : [])
       ]
     };
 
@@ -269,9 +203,9 @@ function calculateWeeklyAverages(entries, metricsKey) {
       const avgGoal = (totals[metric].goal / counts[metric]).toFixed(1);
       const pct = ((totals[metric].achieved / totals[metric].goal) * 100).toFixed(1);
       const status = parseFloat(pct) >= 100 ? '✅' : '⚠️';
-      return `${status} *${metric}*: ${avgAchieved}/${avgGoal} (${pct}%)`;
+      return `${status} ${metric}: ${avgAchieved}/${avgGoal} (${pct}%)`;
     }
-    return `⚪ *${metric}*: No data`;
+    return `⚪ ${metric}: No data`;
   }).join('\n');
 }
 
