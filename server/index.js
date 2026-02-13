@@ -99,117 +99,18 @@ function truncateText(text, maxLength = 500) {
   return text.substring(0, maxLength) + '... (truncated)';
 }
 
-// Weekly summary Slack notification
-async function sendWeeklySlackNotification(weekData) {
-  if (!SLACK_WEBHOOK_URL || SLACK_WEBHOOK_URL === 'https://hooks.slack.com/services/YOUR/WEBHOOK/URL') {
-    console.log('Slack webhook not configured. Skipping notification.');
-    return;
-  }
+// Team name helper
+const getTeamName = (teamId) => {
+  const teams = {
+    'A': 'Front Half Days',
+    'B': 'Front Half Nights',
+    'C': 'Back Half Days',
+    'D': 'Back Half Nights'
+  };
+  return teams[teamId] || `Team ${teamId}`;
+};
 
-  try {
-    const { team, weekStart, weekEnd, entries, actions, lockedBy } = weekData;
-
-    // Calculate weekly averages for VRET
-    const vretAverages = calculateWeeklyAverages(entries, 'vretMetrics');
-
-    // Count WRI incidents
-    const totalWRIs = entries.reduce((sum, entry) => sum + (entry.wriIncidents?.length || 0), 0);
-    const wriStatus = totalWRIs > 0 ? `🚨 ${totalWRIs} WRI incident(s)` : '✅ No incidents';
-
-    // Count locked days
-    const lockedDays = entries.filter(e => e.locked).length;
-    const dayStatus = `${lockedDays}/${entries.length} days locked`;
-
-    // Top 3 actions
-    const topActions = actions.length > 0 
-      ? actions.slice(0, 3).map(a => `• ${a.action.substring(0, 60)}${a.action.length > 60 ? '...' : ''} (${a.status})`).join('\n')
-      : 'No actions';
-
-    const message = {
-      text: `Team ${team} - Week ${weekStart} to ${weekEnd}`,
-      blocks: [
-        {
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text: `*Team ${team} - Week ${weekStart} to ${weekEnd}*\n${wriStatus} | ${dayStatus} | ${actions.length} action(s)`
-          }
-        },
-        {
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text: `*VRET Averages*\n${vretAverages}`
-          }
-        },
-        ...(actions.length > 0 ? [{
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text: `*Top Actions*\n${topActions}${actions.length > 3 ? `\n_+${actions.length - 3} more_` : ''}`
-          }
-        }] : [])
-      ]
-    };
-
-    await axios.post(SLACK_WEBHOOK_URL, message);
-    console.log(`Weekly summary sent for Team ${team} - Week of ${weekStart}`);
-  } catch (error) {
-    console.error('Failed to send weekly Slack notification:', error.message);
-    if (error.response) {
-      console.error('Slack API response:', error.response.status, error.response.data);
-    }
-    throw error;
-  }
-}
-
-function calculateWeeklyAverages(entries, metricsKey) {
-  const metrics = [
-    'Transfer Out',
-    'Transfer Out Dock',
-    'Pick - Total',
-    'Pick - Support',
-    'OB Total',
-    'C-Return Stow Total',
-    'V-Return Pick Total',
-    'V-Return Pack - Total',
-    'V-Return Support',
-    'Vendor Returns - Total'
-  ];
-  
-  const totals = {};
-  const counts = {};
-
-  entries.forEach(entry => {
-    if (entry[metricsKey]) {
-      metrics.forEach(metric => {
-        const data = entry[metricsKey][metric];
-        if (data && data.achieved && data.goal) {
-          if (!totals[metric]) {
-            totals[metric] = { achieved: 0, goal: 0 };
-            counts[metric] = 0;
-          }
-          totals[metric].achieved += parseFloat(data.achieved);
-          totals[metric].goal += parseFloat(data.goal);
-          counts[metric]++;
-        }
-      });
-    }
-  });
-
-  return metrics.map(metric => {
-    if (counts[metric]) {
-      const avgAchieved = (totals[metric].achieved / counts[metric]).toFixed(1);
-      const avgGoal = (totals[metric].goal / counts[metric]).toFixed(1);
-      const pct = ((totals[metric].achieved / totals[metric].goal) * 100).toFixed(1);
-      const status = parseFloat(pct) >= 100 ? '✅' : '⚠️';
-      return `${status} ${metric}: ${avgAchieved}/${avgGoal} (${pct}%)`;
-    }
-    return `⚪ ${metric}: No data`;
-  }).join('\n');
-}
-
-// Slack notification helper
+// Daily WASH notification
 async function sendSlackNotification(entry) {
   if (!SLACK_WEBHOOK_URL || SLACK_WEBHOOK_URL === 'https://hooks.slack.com/services/YOUR/WEBHOOK/URL') {
     console.log('Slack webhook not configured. Skipping notification.');
@@ -265,13 +166,13 @@ async function sendSlackNotification(entry) {
     }
 
     const message = {
-      text: `WASH Entry Completed - Team ${entry.team}`,
+      text: `WASH Entry Completed - ${getTeamName(entry.team)}`,
       blocks: [
         {
           type: "header",
           text: {
             type: "plain_text",
-            text: `🔒 WASH Entry Locked - Team ${entry.team}`,
+            text: `🔒 WASH Entry Locked - ${getTeamName(entry.team)}`,
             emoji: true
           }
         },
@@ -317,12 +218,9 @@ async function sendSlackNotification(entry) {
     }
 
     await axios.post(SLACK_WEBHOOK_URL, message);
-    console.log(`Slack notification sent for Team ${entry.team} - ${date}`);
+    console.log(`Slack notification sent for ${getTeamName(entry.team)} - ${date}`);
   } catch (error) {
     console.error('Failed to send Slack notification:', error.message);
-    if (error.response) {
-      console.error('Slack API response:', error.response.status, error.response.data);
-    }
   }
 }
 
