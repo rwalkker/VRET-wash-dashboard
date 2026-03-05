@@ -80,6 +80,29 @@ app.get('/api/weekly-actions', (req, res) => {
   res.json(db.weeklyActions);
 });
 
+app.post('/api/weekly-actions', (req, res) => {
+  try {
+    const action = req.body;
+    
+    // Generate new ID if not provided
+    if (!action.id) {
+      action.id = db.nextId.action++;
+      action.createdAt = new Date().toISOString();
+    }
+    
+    db.weeklyActions.push(action);
+    saveDb();
+    
+    // Broadcast to all connected clients
+    io.emit('weekly-action-updated', action);
+    
+    res.json({ success: true, action });
+  } catch (error) {
+    console.error('Failed to save weekly action:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.post('/api/lock-week', async (req, res) => {
   const weekData = req.body;
   
